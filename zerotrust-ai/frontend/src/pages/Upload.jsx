@@ -187,18 +187,71 @@ export default function Upload() {
                 exit={{ opacity: 0, height: 0 }}
                 className="overflow-hidden"
               >
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-400">Uploading & analyzing…</span>
-                    <span className="text-cyan-400 font-medium">{uploadProgress}%</span>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">Uploading & analyzing…</span>
+                      <span className="text-cyan-400 font-medium">{uploadProgress}%</span>
+                    </div>
+                    <div className="h-2 bg-slate-700/50 rounded-full overflow-hidden">
+                      <motion.div
+                        className="h-full bg-gradient-to-r from-cyan-500 to-violet-500 rounded-full"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${uploadProgress}%` }}
+                        transition={{ duration: 0.3 }}
+                      />
+                    </div>
                   </div>
-                  <div className="h-2 bg-slate-700/50 rounded-full overflow-hidden">
-                    <motion.div
-                      className="h-full bg-gradient-to-r from-cyan-500 to-violet-500 rounded-full"
-                      initial={{ width: 0 }}
-                      animate={{ width: `${uploadProgress}%` }}
-                      transition={{ duration: 0.3 }}
-                    />
+
+                  {/* AI analysis steps animation */}
+                  <div className="mt-2">
+                    <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">
+                      AI analysis steps
+                    </p>
+                    <ol className="space-y-1 text-xs">
+                      {[
+                        'Analyzing document…',
+                        'Running OCR…',
+                        'Checking image manipulation…',
+                        'Running AI fraud detection…',
+                        'Generating document hash…',
+                      ].map((label, index) => {
+                        const normalized = uploadProgress / 100
+                        const stepThreshold = (index + 1) / 5
+                        const isActive = normalized >= index / 5
+                        const isCompleted = normalized >= stepThreshold
+                        return (
+                          <motion.li
+                            key={label}
+                            initial={{ opacity: 0, x: -8 }}
+                            animate={{ opacity: isActive ? 1 : 0.4, x: 0 }}
+                            transition={{ delay: 0.05 * index }}
+                            className="flex items-center gap-2"
+                          >
+                            <span
+                              className={`inline-flex h-2 w-2 rounded-full ${
+                                isCompleted
+                                  ? 'bg-cyan-400'
+                                  : isActive
+                                    ? 'bg-cyan-400/60'
+                                    : 'bg-slate-600'
+                              }`}
+                            />
+                            <span
+                              className={
+                                isCompleted
+                                  ? 'text-slate-300'
+                                  : isActive
+                                    ? 'text-slate-400'
+                                    : 'text-slate-500'
+                              }
+                            >
+                              {label}
+                            </span>
+                          </motion.li>
+                        )
+                      })}
+                    </ol>
                   </div>
                 </div>
               </motion.div>

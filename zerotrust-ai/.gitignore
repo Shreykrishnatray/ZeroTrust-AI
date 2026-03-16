@@ -1,1 +1,96 @@
- 
+########################
+# Frontend (React/Vite)
+########################
+
+node_modules/
+dist/
+build/
+
+# Vite / bundler caches
+.vite/
+.cache/
+
+# Frontend environment files
+frontend/.env
+frontend/.env.*
+
+
+############
+# Backend
+############
+
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+env/
+.venv/
+.envrc
+
+# Backend environment files
+backend/.env
+backend/.env.*
+
+# SQLite / local databases
+*.db
+*.sqlite
+*.sqlite3
+
+
+###################
+# Machine Learning
+###################
+
+# Model weights / checkpoints
+*.pt
+*.pth
+*.ckpt
+
+# Datasets and artifacts
+datasets/
+data/
+ml-service/models/
+ml-service/notebooks/.ipynb_checkpoints/
+
+
+###############
+# Environment
+###############
+
+# Root env files (keep templates like .env.example)
+.env
+.env.*
+!.env.example
+
+
+########
+# Logs
+########
+
+logs/
+*.log
+
+
+###########
+# OS / IDE
+###########
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# VS Code / JetBrains / others
+.vscode/
+.idea/
+*.iml
+.history/
+

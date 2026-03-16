@@ -45,6 +45,37 @@ export default function Results() {
   const breakdown = Array.isArray(result.analysis_breakdown) ? result.analysis_breakdown : []
   const extractedText = result.extracted_text != null ? String(result.extracted_text).trim() : ''
 
+  // Percent view of fraud score
+  const fraudPercent = Math.round(Math.min(Math.max(fraudScore, 0), 1) * 100)
+
+  // Try to read structured scores if backend exposes them
+  const imageForensicsScore =
+    typeof result.image_forensics_score === 'number'
+      ? result.image_forensics_score
+      : Number(
+          breakdown.find((b) => (b.check || b.name) === 'image_forensics_score')?.value ??
+            breakdown.find((b) => (b.check || b.name) === 'ocr_extraction')?.confidence ??
+            0,
+        )
+
+  const ocrAnalysisScore =
+    typeof result.text_anomaly_score === 'number'
+      ? result.text_anomaly_score
+      : Number(
+          breakdown.find((b) => (b.check || b.name) === 'ocr_analysis_score')?.value ??
+            breakdown.find((b) => (b.check || b.name) === 'ocr_extraction')?.confidence ??
+            0,
+        )
+
+  const deepLearningScore =
+    typeof result.cnn_probability === 'number'
+      ? result.cnn_probability
+      : Number(
+          breakdown.find((b) => (b.check || b.name) === 'deep_learning_score')?.value ??
+            fraudScore ??
+            0,
+        )
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -52,80 +83,97 @@ export default function Results() {
       transition={{ duration: 0.4 }}
       className="max-w-3xl mx-auto py-12"
     >
-      <h1 className="text-3xl font-bold text-slate-100 mb-2">Verification Result</h1>
-      <p className="text-slate-400 mb-8">Analysis result for your submitted document.</p>
+      <h1 className="text-3xl font-bold text-slate-100 mb-2">Results Dashboard</h1>
+      <p className="text-slate-400 mb-8">Overall fraud risk and multi-layer analysis.</p>
 
-      {/* Fraud score & Authenticity */}
-      <GlassCard className="p-8 mb-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+      {/* Top summary: authenticity + fraud meter */}
+      <GlassCard className="p-8 mb-8">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div>
-            <p className="text-sm text-slate-500 uppercase tracking-wider mb-1">Fraud score</p>
-            <p className="text-3xl font-bold text-slate-100">{fraudScore.toFixed(2)}</p>
-            <div className="w-full max-w-[200px] h-2 mt-2 bg-slate-700 rounded-full overflow-hidden">
-              <motion.div
-                className={`h-full rounded-full ${fraudScore >= 0.5 ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                initial={{ width: 0 }}
-                animate={{ width: `${Math.min(fraudScore * 100, 100)}%` }}
-                transition={{ duration: 0.6, delay: 0.2 }}
-              />
-            </div>
-          </div>
-          <div>
-            <p className="text-sm text-slate-500 uppercase tracking-wider mb-1">Authenticity result</p>
+            <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Authenticity status</p>
             <motion.p
-              className={`text-3xl font-bold ${authenticityColor}`}
-              initial={{ scale: 0.9 }}
-              animate={{ scale: 1 }}
+              className={`text-3xl md:text-4xl font-bold ${authenticityColor}`}
+              initial={{ y: 8, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
               transition={{ type: 'spring', bounce: 0.3 }}
             >
-              {authenticityDisplay}
+              {authenticityDisplay === 'REAL'
+                ? 'Authentic'
+                : authenticityDisplay === 'SUSPICIOUS'
+                  ? 'Suspicious Document'
+                  : 'Potentially Fraudulent'}
             </motion.p>
+            <p className="mt-2 text-slate-400 text-sm">
+              Fraud Score:{' '}
+              <span className="font-semibold text-slate-100">
+                {fraudPercent}
+                %
+              </span>
+            </p>
+          </div>
+          <div className="w-full md:w-64">
+            <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Fraud score meter</p>
+            <div className="relative h-3 rounded-full bg-slate-800 overflow-hidden">
+              <motion.div
+                className={`absolute inset-y-0 left-0 rounded-full ${
+                  fraudPercent >= 70
+                    ? 'bg-red-500'
+                    : fraudPercent >= 40
+                      ? 'bg-amber-500'
+                      : 'bg-emerald-500'
+                }`}
+                initial={{ width: 0 }}
+                animate={{ width: `${fraudPercent}%` }}
+                transition={{ duration: 0.6, ease: 'easeOut' }}
+              />
+            </div>
+            <div className="mt-2 flex justify-between text-[11px] text-slate-500">
+              <span>Low</span>
+              <span>Medium</span>
+              <span>High</span>
+            </div>
           </div>
         </div>
       </GlassCard>
 
-      {/* Document hash */}
-      <GlassCard className="p-6 mb-6" delay={0.05}>
-        <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-2">Document hash</h2>
-        <p className="text-slate-400 font-mono text-sm break-all">
-          {result.document_hash || '—'}
-        </p>
-      </GlassCard>
+      {/* Breakdown cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <GlassCard className="p-5 glow-cyan">
+          <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Image Forensics Score</p>
+          <p className="text-2xl font-semibold text-slate-100">{Math.round(imageForensicsScore * 100)}%</p>
+          <p className="text-xs text-slate-500 mt-1">ELA, edges, and noise inconsistency.</p>
+        </GlassCard>
+        <GlassCard className="p-5">
+          <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">OCR Analysis Score</p>
+          <p className="text-2xl font-semibold text-slate-100">{Math.round(ocrAnalysisScore * 100)}%</p>
+          <p className="text-xs text-slate-500 mt-1">Text confidence and anomaly signal.</p>
+        </GlassCard>
+        <GlassCard className="p-5 glow-violet">
+          <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Deep Learning Score</p>
+          <p className="text-2xl font-semibold text-slate-100">{Math.round(deepLearningScore * 100)}%</p>
+          <p className="text-xs text-slate-500 mt-1">CNN probability of forgery.</p>
+        </GlassCard>
+      </div>
 
-      {/* Analysis breakdown */}
-      <GlassCard className="p-6 mb-6" delay={0.1}>
-        <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">Analysis breakdown</h2>
-        {breakdown.length > 0 ? (
-          <ul className="space-y-2">
-            {breakdown.map((item, i) => (
-              <motion.li
-                key={i}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.1 + i * 0.05 }}
-                className="flex justify-between items-center py-2 border-b border-white/5 last:border-0"
-              >
-                <span className="text-slate-300">{item.check ?? item.name ?? 'Check'}</span>
-                <span className="text-slate-400 text-sm">
-                  {item.result ?? (item.confidence != null ? `confidence ${item.confidence}` : '—')}
-                </span>
-              </motion.li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-slate-500 text-sm">No breakdown available.</p>
-        )}
-      </GlassCard>
-
-      {/* Extracted text */}
-      <GlassCard className="p-6 mb-8" delay={0.15}>
-        <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-3">Extracted text</h2>
-        {extractedText ? (
-          <p className="text-slate-400 text-sm whitespace-pre-wrap font-mono">{extractedText}</p>
-        ) : (
-          <p className="text-slate-500 text-sm italic">No text extracted from this document.</p>
-        )}
-      </GlassCard>
+      {/* Document hash + extracted text below the main dashboard */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <GlassCard className="p-6" delay={0.05}>
+          <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-2">Document hash</h2>
+          <p className="text-slate-400 font-mono text-xs break-all">
+            {result.document_hash || '—'}
+          </p>
+        </GlassCard>
+        <GlassCard className="p-6" delay={0.1}>
+          <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-2">Extracted text</h2>
+          {extractedText ? (
+            <p className="text-slate-400 text-xs whitespace-pre-wrap font-mono max-h-40 overflow-auto">
+              {extractedText}
+            </p>
+          ) : (
+            <p className="text-slate-500 text-sm italic">No text extracted from this document.</p>
+          )}
+        </GlassCard>
+      </div>
 
       <div className="text-center">
         <Link to="/upload">
