@@ -2,10 +2,6 @@
 
 Hackathon-ready identity document fraud detection demo that combines **OCR**, **image forensics**, and a **deep learning classifier** to produce a single, explainable **fraud score**.
 
-hello shrey???
-
-hello world...
-
 ### Project overview
 
 - **Goal**: Detect forged/manipulated identity document images and return a clear result for operators/judges.
