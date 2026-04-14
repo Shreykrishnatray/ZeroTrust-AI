@@ -4,13 +4,18 @@ import GlassCard from '../components/GlassCard'
 
 export default function Landing() {
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="relative max-w-6xl mx-auto">
+      
+      {/* Background Image */}
+      <div className="absolute inset-0 -z-10 opacity-20 bg-[url('/bg.jpeg')] bg-cover bg-center" />
+
       <motion.section
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
         className="pt-16 pb-24 text-center"
       >
+
         <motion.p
           className="text-cyan-400 font-medium tracking-wider uppercase text-sm mb-4"
           initial={{ opacity: 0 }}

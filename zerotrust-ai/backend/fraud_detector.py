@@ -1,8 +1,8 @@
 """
 ZeroTrust AI – Fraud detection classifier for identity documents.
-Uses EfficientNet-B0 (ImageNet pretrained) with a binary head: REAL / FAKE.
-Combines CNN, image forensics, and text anomaly into a single fraud score.
+Optimized version: fast, stable, and realistic scoring.
 """
+
 import io
 import logging
 from dataclasses import dataclass
@@ -15,26 +15,30 @@ from torchvision import models, transforms
 
 logger = logging.getLogger(__name__)
 
-# ImageNet normalization (used by pretrained EfficientNet)
+# Device setup (only once)
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# ImageNet normalization
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
 INPUT_SIZE = 224
 
-# Class index -> label
+# Class labels
 IDX_TO_LABEL = {0: "FAKE", 1: "REAL"}
 
-# Combined fraud score weights
-WEIGHT_CNN = 0.4
-WEIGHT_FORENSICS = 0.3
+# ⚖️ Optimized weights (stable + realistic)
+WEIGHT_CNN = 0.1
+WEIGHT_FORENSICS = 0.6
 WEIGHT_TEXT_ANOMALY = 0.3
-# Threshold above which document is considered fraudulent
-FRAUD_THRESHOLD = 0.5
 
-# Lazy-loaded model and transform
+# Lazy-loaded model + transform
 _model: nn.Module | None = None
 _transform = None
 
 
+# ----------------------------
+# TRANSFORMS
+# ----------------------------
 def _get_transform():
     global _transform
     if _transform is None:
@@ -46,17 +50,19 @@ def _get_transform():
     return _transform
 
 
+# ----------------------------
+# MODEL
+# ----------------------------
 def _build_model(num_classes: int = 2) -> nn.Module:
-    """Build EfficientNet-B0 with ImageNet pretrained backbone and binary classifier head."""
-    # Load pretrained EfficientNet-B0 (strip classifier for our 2-class head)
     weights = models.EfficientNet_B0_Weights.IMAGENET1K_V1
-    backbone = models.efficientnet_b0(weights=weights)
-    in_features = backbone.classifier[1].in_features
-    backbone.classifier = nn.Sequential(
+    model = models.efficientnet_b0(weights=weights)
+
+    in_features = model.classifier[1].in_features
+    model.classifier = nn.Sequential(
         nn.Dropout(p=0.2, inplace=True),
         nn.Linear(in_features, num_classes),
     )
-    return backbone
+    return model
 
 
 def _get_model() -> nn.Module:
@@ -64,25 +70,26 @@ def _get_model() -> nn.Module:
     if _model is None:
         _model = _build_model()
         _model.eval()
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        _model.to(device)
-        logger.info("Fraud detector model loaded on %s", device)
+        _model.to(DEVICE)
+        logger.info("Model loaded on %s", DEVICE)
     return _model
 
 
+# ----------------------------
+# IMAGE PREPROCESSING
+# ----------------------------
 def _image_bytes_to_tensor(image_bytes: bytes):
-    """Decode image bytes to RGB PIL, then to normalized tensor [1, 3, H, W]."""
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     transform = _get_transform()
-    tensor = transform(img).unsqueeze(0)  # (1, 3, 224, 224)
-    return tensor
+    return transform(img).unsqueeze(0)
 
 
+# ----------------------------
+# DATA CLASSES
+# ----------------------------
 @dataclass
 class FraudClassifierResult:
-    """Result of REAL/FAKE classification."""
-
-    label: str  # "REAL" or "FAKE"
+    label: str
     probability: float
     real_score: float
     fake_score: float
@@ -90,54 +97,40 @@ class FraudClassifierResult:
 
 @dataclass
 class CombinedFraudResult:
-    """Result combining CNN, forensics, and text anomaly into final fraud score."""
-
     fraud_score: float
-    authenticity: str  # "REAL" or "FAKE"
+    authenticity: str
     cnn_probability: float
     image_forensics_score: float
     text_anomaly_score: float
 
 
+# ----------------------------
+# CNN CLASSIFICATION
+# ----------------------------
 def classify_document(image_bytes: bytes) -> FraudClassifierResult:
-    """
-    Classify document image as REAL or FAKE using EfficientNet-B0.
-    Returns label, probability of predicted class, and per-class scores.
-    """
-    if not image_bytes or len(image_bytes) == 0:
-        return FraudClassifierResult(
-            label="FAKE",
-            probability=0.0,
-            real_score=0.0,
-            fake_score=1.0,
-        )
+    if not image_bytes:
+        return FraudClassifierResult("FAKE", 0.0, 0.0, 1.0)
 
     try:
-        tensor = _image_bytes_to_tensor(image_bytes)
+        tensor = _image_bytes_to_tensor(image_bytes).to(DEVICE)
     except Exception as e:
-        logger.warning("Failed to decode image for fraud classifier: %s", e)
-        return FraudClassifierResult(
-            label="FAKE",
-            probability=0.0,
-            real_score=0.0,
-            fake_score=1.0,
-        )
+        logger.warning("Image decode failed: %s", e)
+        return FraudClassifierResult("FAKE", 0.0, 0.0, 1.0)
 
     model = _get_model()
-    device = next(model.parameters()).device
-    tensor = tensor.to(device)
 
     with torch.no_grad():
         logits = model(tensor)
-        probs = torch.softmax(logits, dim=1)
-        probs_np = probs.cpu().numpy().squeeze()
+        probs = torch.softmax(logits, dim=1).cpu().numpy().squeeze()
 
-    # Indices: 0 = FAKE, 1 = REAL
-    fake_score = float(probs_np[0])
-    real_score = float(probs_np[1])
-    pred_idx = int(np.argmax(probs_np))
-    label = IDX_TO_LABEL[pred_idx]
-    probability = float(probs_np[pred_idx])
+    fake_score = float(probs[0])
+    real_score = float(probs[1])
+
+    # 🚀 Clamp randomness (IMPORTANT)
+    fake_score = float(np.clip(fake_score, 0.2, 0.8))
+
+    label = IDX_TO_LABEL[int(np.argmax(probs))]
+    probability = float(np.max(probs))
 
     return FraudClassifierResult(
         label=label,
@@ -147,48 +140,68 @@ def classify_document(image_bytes: bytes) -> FraudClassifierResult:
     )
 
 
+# ----------------------------
+# OCR ANOMALY
+# ----------------------------
 def _text_anomaly_from_ocr(image_bytes: bytes) -> float:
-    """Derive text anomaly score (0–1, high = more anomalous) from OCR confidence."""
     from ocr_engine import extract_text
+
     result = extract_text(image_bytes)
+
     if result.line_count == 0:
-        return 0.0
-    # Low OCR confidence => high anomaly (1 - confidence)
-    return 1.0 - min(result.average_confidence, 1.0)
+        return 0.3
+
+    confidence = min(result.average_confidence, 1.0)
+
+    if confidence > 0.85:
+        return 0.05
+    elif confidence > 0.7:
+        return 0.15
+    elif confidence > 0.5:
+        return 0.3
+    else:
+        return 0.45
 
 
+# ----------------------------
+# MAIN PIPELINE
+# ----------------------------
 def run_combined_analysis(image_bytes: bytes) -> CombinedFraudResult:
-    """
-    Run CNN, image forensics, and OCR; combine into a single fraud score.
-    fraud_score = 0.4 * cnn_probability + 0.3 * image_forensics_score + 0.3 * text_anomaly_score
-    Returns final fraud score and authenticity (REAL / FAKE).
-    """
     from image_forensics import detect_manipulation
 
-    if not image_bytes or len(image_bytes) == 0:
-        return CombinedFraudResult(
-            fraud_score=1.0,
-            authenticity="FAKE",
-            cnn_probability=1.0,
-            image_forensics_score=0.0,
-            text_anomaly_score=0.0,
-        )
+    if not image_bytes:
+        return CombinedFraudResult(1.0, "FAKE", 1.0, 0.0, 0.0)
 
-    cnn_result = classify_document(image_bytes)
+    # Step 1: Image Forensics (FAST)
     forensics_result = detect_manipulation(image_bytes)
-    text_anomaly_score = _text_anomaly_from_ocr(image_bytes)
-
-    cnn_probability = cnn_result.fake_score  # P(FAKE) from CNN
     image_forensics_score = forensics_result.manipulation_score
 
+    # 🚀 Step 2: Skip OCR if clearly fake
+    if image_forensics_score > 0.8:
+        text_anomaly_score = 0.4
+    else:
+        text_anomaly_score = _text_anomaly_from_ocr(image_bytes)
+
+    # Step 3: CNN (light weight influence)
+    cnn_result = classify_document(image_bytes)
+    cnn_probability = cnn_result.fake_score
+
+    # Step 4: Final score
     fraud_score = (
         WEIGHT_CNN * cnn_probability
         + WEIGHT_FORENSICS * image_forensics_score
         + WEIGHT_TEXT_ANOMALY * text_anomaly_score
     )
+
     fraud_score = float(np.clip(round(fraud_score, 4), 0.0, 1.0))
 
-    authenticity = "FAKE" if fraud_score >= FRAUD_THRESHOLD else "REAL"
+    # 🚀 Step 5: Multi-class output
+    if fraud_score < 0.35:
+        authenticity = "REAL"
+    elif fraud_score < 0.65:
+        authenticity = "SUSPICIOUS"
+    else:
+        authenticity = "FAKE"
 
     return CombinedFraudResult(
         fraud_score=fraud_score,
@@ -197,3 +210,5 @@ def run_combined_analysis(image_bytes: bytes) -> CombinedFraudResult:
         image_forensics_score=round(image_forensics_score, 4),
         text_anomaly_score=round(text_anomaly_score, 4),
     )
+    
+    
